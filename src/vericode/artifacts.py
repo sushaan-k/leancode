@@ -19,7 +19,9 @@ def canonical_spec(spec: Spec) -> str:
     All public fields participate in the digest, so any change to the
     specification changes the resulting hash.
     """
-    return json.dumps(spec.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        spec.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+    )
 
 
 def comment_prefix(backend_name: str) -> str:

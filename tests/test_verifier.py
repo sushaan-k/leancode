@@ -190,7 +190,9 @@ class TestVerifyPipeline:
     def test_certificate_verify_certificate_binds_code_and_spec(
         self, sort_spec: Spec
     ) -> None:
-        cert = _build_certificate(sort_spec, "def sort(lst): return sorted(lst)", "proof", "lean4")
+        cert = _build_certificate(
+            sort_spec, "def sort(lst): return sorted(lst)", "proof", "lean4"
+        )
 
         assert ProofCertificate.verify_certificate(
             cert,

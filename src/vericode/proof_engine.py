@@ -188,7 +188,8 @@ class ProofEngine:
                 )
                 raise RefinementExhaustedError(
                     max_iterations=iteration,
-                    last_error="; ".join(vresult.errors) or "backend verification failed",
+                    last_error="; ".join(vresult.errors)
+                    or "backend verification failed",
                 )
 
             # --- Refine ---

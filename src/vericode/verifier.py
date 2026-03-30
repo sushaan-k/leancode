@@ -139,7 +139,9 @@ def _build_certificate(
     backend_name: str,
 ) -> ProofCertificate:
     """Construct a proof receipt from verified artefacts."""
-    spec_hash, code_hash, proof_source = _build_bound_artifact(spec, code, proof, backend_name)
+    spec_hash, code_hash, proof_source = _build_bound_artifact(
+        spec, code, proof, backend_name
+    )
     return ProofCertificate(
         spec_hash=spec_hash,
         code_hash=code_hash,
