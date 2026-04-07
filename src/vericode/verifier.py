@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -22,6 +23,9 @@ from vericode.proof_engine import ProofEngine, RefinementResult
 from vericode.spec import Spec, parse_spec
 
 logger = logging.getLogger(__name__)
+
+# A progress callback receives (stage_name, current_step, total_steps).
+ProgressCallback = Callable[[str, int, int], None]
 
 
 @dataclass
@@ -163,6 +167,17 @@ def _build_bound_artifact(
     return _sha256(_spec_canonical(spec)), _sha256(code), proof_source
 
 
+def _notify(
+    callback: ProgressCallback | None,
+    stage: str,
+    current: int,
+    total: int,
+) -> None:
+    """Fire the progress callback if one is registered."""
+    if callback is not None:
+        callback(stage, current, total)
+
+
 async def verify(
     spec_input: str | Spec,
     *,
@@ -175,6 +190,7 @@ async def verify(
     existing_code: str | None = None,
     use_cache: bool = True,
     cache: VerificationCache | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> VerificationOutput:
     """Run the full vericode pipeline.
 
@@ -250,10 +266,12 @@ async def verify(
             )
 
     # --- Build pipeline ---
+    _notify(progress_callback, "setup", 1, 3)
     generator = DualGenerator(provider, temperature=temperature, max_tokens=max_tokens)
     engine = ProofEngine(generator, backend_obj, max_iterations=max_iterations)
 
     # --- Execute ---
+    _notify(progress_callback, "generating", 2, 3)
     logger.info(
         "Starting verification pipeline",
         extra={
@@ -282,6 +300,7 @@ async def verify(
             ],
         )
 
+    _notify(progress_callback, "verified", 3, 3)
     certificate = _build_certificate(spec, result.code, result.proof, backend_obj.name)
 
     output = VerificationOutput(
