@@ -11,7 +11,6 @@ from vericode.backends import (
     VerusBackend,
     get_backend,
 )
-from vericode.exceptions import ProofCompilationError
 
 # ---------------------------------------------------------------------------
 # get_backend registry tests
@@ -113,15 +112,14 @@ class TestProofTemplates:
 class TestLean4Verify:
     """Tests for the Lean4Backend verify method."""
 
-    async def test_lean_verify_returns_result_or_raises(self) -> None:
-        """Verify either returns a success result or raises ProofCompilationError."""
+    async def test_lean_not_installed(self) -> None:
+        """If lean is not on PATH, verify returns an error result."""
         backend = Lean4Backend()
-        try:
-            result = await backend.verify("-- just a comment")
-            assert isinstance(result, VerificationResult)
-            assert result.backend == "lean4"
-        except ProofCompilationError as exc:
-            assert exc.backend_name == "lean4"
+        # This will fail because lean is likely not installed in CI
+        result = await backend.verify("-- invalid lean source")
+        # Should not raise, should return a result
+        assert isinstance(result, VerificationResult)
+        assert result.backend == "lean4"
 
     async def test_check_installed_returns_bool(self) -> None:
         backend = Lean4Backend()
@@ -132,15 +130,11 @@ class TestLean4Verify:
 class TestDafnyVerify:
     """Tests for the DafnyBackend verify method."""
 
-    async def test_dafny_verify_returns_result_or_raises(self) -> None:
-        """Verify either returns a success result or raises ProofCompilationError."""
+    async def test_dafny_not_installed(self) -> None:
         backend = DafnyBackend()
-        try:
-            result = await backend.verify("// valid dafny source")
-            assert isinstance(result, VerificationResult)
-            assert result.backend == "dafny"
-        except ProofCompilationError as exc:
-            assert exc.backend_name == "dafny"
+        result = await backend.verify("// invalid dafny source")
+        assert isinstance(result, VerificationResult)
+        assert result.backend == "dafny"
 
     async def test_check_installed_returns_bool(self) -> None:
         backend = DafnyBackend()
@@ -151,15 +145,11 @@ class TestDafnyVerify:
 class TestVerusVerify:
     """Tests for the VerusBackend verify method."""
 
-    async def test_verus_verify_returns_result_or_raises(self) -> None:
-        """Verify either returns a success result or raises ProofCompilationError."""
+    async def test_verus_not_installed(self) -> None:
         backend = VerusBackend()
-        try:
-            result = await backend.verify("// valid verus source")
-            assert isinstance(result, VerificationResult)
-            assert result.backend == "verus"
-        except ProofCompilationError as exc:
-            assert exc.backend_name == "verus"
+        result = await backend.verify("// invalid verus source")
+        assert isinstance(result, VerificationResult)
+        assert result.backend == "verus"
 
     async def test_check_installed_returns_bool(self) -> None:
         backend = VerusBackend()

@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 
 from vericode.backends.base import VerificationBackend, VerificationResult
-from vericode.exceptions import ProofCompilationError
 
 logger = logging.getLogger(__name__)
 
@@ -72,23 +71,21 @@ class VerusBackend(VerificationBackend):
                 proc.communicate(), timeout=self.timeout
             )
         except FileNotFoundError:
-            raise ProofCompilationError(
-                "verus binary not found on PATH",
-                backend_name=self.name,
-                source_file=str(tmp_path),
-                error_lines=["verus binary not found on PATH"],
-                raw_output="",
-            ) from None
+            return VerificationResult(
+                success=False,
+                compiler_output="",
+                errors=["verus binary not found on PATH"],
+                backend=self.name,
+            )
         except TimeoutError:
             proc.kill()
             await proc.wait()
-            raise ProofCompilationError(
-                f"verus verification timed out after {self.timeout}s",
-                backend_name=self.name,
-                source_file=str(tmp_path),
-                error_lines=[f"verus verification timed out after {self.timeout}s"],
-                raw_output="",
-            ) from None
+            return VerificationResult(
+                success=False,
+                compiler_output="",
+                errors=[f"verus verification timed out after {self.timeout}s"],
+                backend=self.name,
+            )
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -96,19 +93,10 @@ class VerusBackend(VerificationBackend):
         output = (stdout_bytes.decode() + "\n" + stderr_bytes.decode()).strip()
         errors = _parse_verus_errors(output)
 
-        if proc.returncode != 0 or len(errors) > 0:
-            raise ProofCompilationError(
-                f"Verus proof compilation failed with {len(errors)} error(s)",
-                backend_name=self.name,
-                source_file=str(tmp_path),
-                error_lines=errors,
-                raw_output=output,
-            )
-
         return VerificationResult(
-            success=True,
+            success=proc.returncode == 0 and len(errors) == 0,
             compiler_output=output,
-            errors=[],
+            errors=errors,
             elapsed_seconds=elapsed,
             backend=self.name,
         )

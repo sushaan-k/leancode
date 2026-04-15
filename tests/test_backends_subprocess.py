@@ -4,8 +4,8 @@ Each backend (Lean4, Dafny, Verus) shells out to a binary. These tests
 mock ``asyncio.create_subprocess_exec`` to exercise the full verify()
 path including:
 - Successful compilation
-- Compilation with errors (raises ProofCompilationError)
-- Binary not found (raises ProofCompilationError)
+- Compilation with errors
+- Binary not found (FileNotFoundError)
 - Error parsing logic
 """
 
@@ -18,7 +18,6 @@ import pytest
 from vericode.backends.dafny import DafnyBackend, _parse_dafny_errors
 from vericode.backends.lean4 import Lean4Backend, _parse_lean_errors
 from vericode.backends.verus import VerusBackend, _parse_verus_errors
-from vericode.exceptions import ProofCompilationError
 
 
 def _mock_process(
@@ -64,21 +63,21 @@ class TestLean4Subprocess:
             stderr=b"error: unsolved goals\nerror: type mismatch",
         )
         backend = Lean4Backend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("theorem bad := by sorry")
+        result = await backend.verify("theorem bad := by sorry")
 
-        assert exc_info.value.backend_name == "lean4"
-        assert len(exc_info.value.error_lines) == 2
-        assert "unsolved goals" in exc_info.value.error_lines[0]
+        assert result.success is False
+        assert len(result.errors) == 2
+        assert "unsolved goals" in result.errors[0]
+        assert result.backend == "lean4"
 
     @patch("vericode.backends.lean4.asyncio.create_subprocess_exec")
     async def test_binary_not_found(self, mock_exec: AsyncMock) -> None:
         mock_exec.side_effect = FileNotFoundError("lean not found")
         backend = Lean4Backend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("anything")
+        result = await backend.verify("anything")
 
-        assert "not found" in exc_info.value.error_lines[0]
+        assert result.success is False
+        assert "not found" in result.errors[0]
 
     @patch("vericode.backends.lean4.asyncio.create_subprocess_exec")
     async def test_check_installed_success(self, mock_exec: AsyncMock) -> None:
@@ -114,14 +113,14 @@ class TestLean4Subprocess:
     async def test_returncode_zero_but_errors_in_output(
         self, mock_exec: AsyncMock
     ) -> None:
-        """Edge case: returncode=0 but error lines in output -> raises."""
+        """Edge case: returncode=0 but error lines in output -> failure."""
         mock_exec.return_value = _mock_process(
             returncode=0,
             stderr=b"error: something unexpected",
         )
         backend = Lean4Backend()
-        with pytest.raises(ProofCompilationError):
-            await backend.verify("theorem t := by trivial")
+        result = await backend.verify("theorem t := by trivial")
+        assert result.success is False
 
 
 # ---------------------------------------------------------------------------
@@ -154,20 +153,19 @@ class TestDafnySubprocess:
             stderr=b"",
         )
         backend = DafnyBackend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("method Bad() ensures false {}")
+        result = await backend.verify("method Bad() ensures false {}")
 
-        assert exc_info.value.backend_name == "dafny"
-        assert len(exc_info.value.error_lines) == 2
+        assert result.success is False
+        assert len(result.errors) == 2
 
     @patch("vericode.backends.dafny.asyncio.create_subprocess_exec")
     async def test_binary_not_found(self, mock_exec: AsyncMock) -> None:
         mock_exec.side_effect = FileNotFoundError("dafny not found")
         backend = DafnyBackend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("anything")
+        result = await backend.verify("anything")
 
-        assert "not found" in exc_info.value.error_lines[0]
+        assert result.success is False
+        assert "not found" in result.errors[0]
 
     @patch("vericode.backends.dafny.asyncio.create_subprocess_exec")
     async def test_check_installed_success(self, mock_exec: AsyncMock) -> None:
@@ -203,8 +201,8 @@ class TestDafnySubprocess:
             stdout=b"Error: something went wrong",
         )
         backend = DafnyBackend()
-        with pytest.raises(ProofCompilationError):
-            await backend.verify("method M() {}")
+        result = await backend.verify("method M() {}")
+        assert result.success is False
 
 
 # ---------------------------------------------------------------------------
@@ -236,20 +234,19 @@ class TestVerusSubprocess:
             stderr=b"error[E0308]: mismatched types\nerror: aborting due to error",
         )
         backend = VerusBackend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("verus! { fn bad() {} }")
+        result = await backend.verify("verus! { fn bad() {} }")
 
-        assert exc_info.value.backend_name == "verus"
-        assert len(exc_info.value.error_lines) == 2
+        assert result.success is False
+        assert len(result.errors) == 2
 
     @patch("vericode.backends.verus.asyncio.create_subprocess_exec")
     async def test_binary_not_found(self, mock_exec: AsyncMock) -> None:
         mock_exec.side_effect = FileNotFoundError("verus not found")
         backend = VerusBackend()
-        with pytest.raises(ProofCompilationError) as exc_info:
-            await backend.verify("anything")
+        result = await backend.verify("anything")
 
-        assert "not found" in exc_info.value.error_lines[0]
+        assert result.success is False
+        assert "not found" in result.errors[0]
 
     @patch("vericode.backends.verus.asyncio.create_subprocess_exec")
     async def test_check_installed_success(self, mock_exec: AsyncMock) -> None:
@@ -278,8 +275,8 @@ class TestVerusSubprocess:
             stderr=b"error: verification failed",
         )
         backend = VerusBackend()
-        with pytest.raises(ProofCompilationError):
-            await backend.verify("verus! { fn f() {} }")
+        result = await backend.verify("verus! { fn f() {} }")
+        assert result.success is False
 
 
 # ---------------------------------------------------------------------------
@@ -396,9 +393,9 @@ class TestAllBackendsParametrized:
         with patch(f"{module_path}.asyncio.create_subprocess_exec") as mock_exec:
             mock_exec.side_effect = FileNotFoundError
             backend = backend_cls()
-            with pytest.raises(ProofCompilationError) as exc_info:
-                await backend.verify("proof")
-            assert len(exc_info.value.error_lines) > 0
+            result = await backend.verify("proof")
+            assert result.success is False
+            assert len(result.errors) > 0
 
     @pytest.mark.parametrize(
         "backend_cls",
