@@ -1,11 +1,9 @@
-# leancode
+# vericode
 
-[![CI](https://github.com/sushaan-k/leancode/actions/workflows/ci.yml/badge.svg)](https://github.com/sushaan-k/leancode/actions)
-[![PyPI](https://img.shields.io/pypi/v/leancode.svg)](https://pypi.org/project/leancode/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/leancode.svg)](https://pypi.org/project/leancode/)
+[![CI](https://github.com/sushaan-k/vericode/actions/workflows/ci.yml/badge.svg)](https://github.com/sushaan-k/vericode/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Lean 4](https://img.shields.io/badge/Lean-4-purple.svg)](https://lean-lang.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 **Formally verified AI code generation.**
 
@@ -34,10 +32,10 @@ Nobody has connected these into a usable pipeline.
 
 ## The Solution
 
-`leancode` is a CLI tool and Python library that takes a natural language specification, generates both implementation code and a formal proof of correctness, and verifies the proof compiles -- all in one command.
+`vericode` is a CLI tool and Python library that takes a natural language specification, generates both implementation code and a formal proof of correctness, and verifies the proof compiles -- all in one command.
 
 ```bash
-leancode verify "sort a list of integers" --lang python --backend lean4
+vericode verify "sort a list of integers" --lang python --backend lean4
 ```
 
 If the proof compiles, the code is **mathematically proven correct** against the spec. This is not testing. This is proof.
@@ -47,7 +45,7 @@ If the proof compiles, the code is **mathematically proven correct** against the
 ### Install
 
 ```bash
-pip install leancode
+pip install vericode
 ```
 
 ### Set your API key
@@ -104,36 +102,24 @@ result = await verify(spec, language="python", backend="dafny", max_iterations=1
 
 ```bash
 # Verify from natural language
-leancode verify "sort a list of integers" --lang python --backend lean4
+vericode verify "sort a list of integers" --lang python --backend lean4
 
 # Verify from a YAML spec file
-leancode verify --spec spec.yaml --lang rust --backend verus
+vericode verify --spec spec.yaml --lang rust --backend verus
 
 # Generate proof for existing code
-leancode prove --code sort.py --spec "output is sorted permutation of input"
+vericode prove --code sort.py --spec "output is sorted permutation of input"
 
 # Batch verification
-leancode batch --specs specs/ --output verified/
+vericode batch --specs specs/ --output verified/
 
 # Batch verification with an explicit implementation language override
-leancode batch --specs specs/ --output verified/ --backend verus --lang rust
+vericode batch --specs specs/ --output verified/ --backend verus --lang rust
 ```
 
-`leancode batch` defaults to the backend's native implementation language
+`vericode batch` defaults to the backend's native implementation language
 (`lean` for Lean 4, `dafny` for Dafny, and `rust` for Verus) unless
 `--lang` is provided.
-
-## Verification Capabilities
-
-| Metric | Result |
-|--------|--------|
-| Auto-discharge rate (aesop/omega/decide) | 65% on standard library benchmark |
-| Spec-to-Lean translation accuracy | 91% first-pass proof validation |
-| Mean iterations to proof compilation | 2.3 (median 2) |
-| Supported backend languages | 3 (Lean 4, Dafny, Verus) |
-| Target implementation languages | 5+ (Python, Rust, C#, Java, Go) |
-
-Results are from our internal benchmark suite of 200+ algorithmic and data structure specifications.
 
 ## How It Works
 
@@ -187,9 +173,9 @@ Runs the proof assistant compiler (lean4 / dafny verify / verus) for final machi
 
 | Provider | Models | Install |
 |----------|--------|---------|
-| Anthropic | Claude Sonnet, Opus | `pip install leancode` (default) |
-| OpenAI | GPT-4o | `pip install leancode` |
-| DeepSeek | DeepSeek-Prover-V2 | `pip install leancode` |
+| Anthropic | Claude Sonnet, Opus | `pip install vericode` (default) |
+| OpenAI | GPT-4o | `pip install vericode` |
+| DeepSeek | DeepSeek-Prover-V2 | `pip install vericode` |
 
 ## Architecture
 
@@ -257,8 +243,8 @@ For backend-specific flows, see the larger examples in `examples/`.
 
 ```bash
 # Clone and install in dev mode
-git clone https://github.com/sushaan-k/leancode.git
-cd leancode
+git clone https://github.com/sushaan-k/vericode.git
+cd vericode
 pip install -e ".[dev]"
 
 # Run tests
