@@ -185,3 +185,35 @@ class VerificationCache:
             "entries": live_entries,
             "bytes": total_bytes,
         }
+
+    def list_entries(self, limit: int = 20) -> list[dict[str, int | str]]:
+        """Return lightweight metadata for cache entries."""
+        if not self._cache_dir.exists():
+            return []
+
+        files: list[tuple[float, Path]] = []
+        for path in self._cache_dir.glob("*.json"):
+            try:
+                files.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+
+        entries: list[dict[str, int | str]] = []
+        for _mtime, path in sorted(files, key=lambda item: item[0], reverse=True):
+            if len(entries) >= limit:
+                break
+            try:
+                data = json.loads(path.read_text())
+                if not isinstance(data, dict):
+                    continue
+                entries.append(
+                    {
+                        "cache_key": str(data.get("cache_key", path.stem)),
+                        "backend": str(data.get("backend", "")),
+                        "language": str(data.get("language", "")),
+                        "bytes": path.stat().st_size,
+                    }
+                )
+            except (json.JSONDecodeError, OSError):
+                continue
+        return entries

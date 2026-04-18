@@ -386,13 +386,24 @@ def batch(
     help="Override the verification cache directory.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def cache_inspect(cache_dir: Path | None, as_json: bool) -> None:
+@click.option("--list", "list_entries", is_flag=True, help="List recent entries.")
+def cache_inspect(
+    cache_dir: Path | None,
+    as_json: bool,
+    list_entries: bool,
+) -> None:
     """Inspect the local verification cache."""
     from vericode.cache import VerificationCache
 
-    stats = VerificationCache(cache_dir=cache_dir).stats()
+    cache = VerificationCache(cache_dir=cache_dir)
+    stats = cache.stats()
+    entries_detail = cache.list_entries() if list_entries else []
+    payload = {
+        **stats,
+        "entries_detail": entries_detail,
+    }
     if as_json:
-        click.echo(json.dumps(stats, indent=2))
+        click.echo(json.dumps(payload, indent=2))
         return
 
     console.print(
@@ -404,6 +415,12 @@ def cache_inspect(cache_dir: Path | None, as_json: bool) -> None:
             border_style="magenta",
         )
     )
+    if list_entries:
+        for entry in entries_detail:
+            console.print(
+                f"- {entry['cache_key']} [{entry['backend']}/{entry['language']}] "
+                f"{entry['bytes']} bytes"
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -138,3 +138,26 @@ class TestCLI:
         assert payload["entries"] == 1
         assert payload["cache_dir"] == str(cache_dir)
         assert payload["bytes"] == 2
+
+    def test_cache_json_lists_entries(self, runner: CliRunner, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "wrong-shape.json").write_text("[]")
+        (cache_dir / "entry.json").write_text(
+            json.dumps(
+                {
+                    "cache_key": "entry",
+                    "backend": "lean4",
+                    "language": "python",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            main,
+            ["cache", "--cache-dir", str(cache_dir), "--json", "--list"],
+        )
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["entries_detail"][0]["cache_key"] == "entry"
