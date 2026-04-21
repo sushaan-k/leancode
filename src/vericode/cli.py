@@ -398,10 +398,9 @@ def cache_inspect(
     cache = VerificationCache(cache_dir=cache_dir)
     stats = cache.stats()
     entries_detail = cache.list_entries() if list_entries else []
-    payload = {
-        **stats,
-        "entries_detail": entries_detail,
-    }
+    payload: dict[str, object] = dict(stats)
+    if list_entries:
+        payload["entries_detail"] = entries_detail
     if as_json:
         click.echo(json.dumps(payload, indent=2))
         return

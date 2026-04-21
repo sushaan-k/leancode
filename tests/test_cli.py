@@ -138,6 +138,7 @@ class TestCLI:
         assert payload["entries"] == 1
         assert payload["cache_dir"] == str(cache_dir)
         assert payload["bytes"] == 2
+        assert "entries_detail" not in payload
 
     def test_cache_json_lists_entries(self, runner: CliRunner, tmp_path: Path) -> None:
         cache_dir = tmp_path / "cache"
