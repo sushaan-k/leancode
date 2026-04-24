@@ -335,6 +335,21 @@ class TestBatchCommand:
         assert (output_dir / "sort.proof").exists()
         assert (output_dir / "sort.cert.json").exists()
         assert (output_dir / "search.lean").exists()
+        manifest = json.loads((output_dir / "manifest.json").read_text())
+        assert manifest["schema_version"] == 1
+        assert manifest["total"] == 2
+        assert manifest["verified"] == 2
+        assert manifest["failed"] == 0
+        assert manifest["backend"] == "lean4"
+        assert manifest["language"] == "lean"
+        assert manifest["provider"] == "anthropic"
+        assert [entry["name"] for entry in manifest["entries"]] == [
+            "search",
+            "sort",
+        ]
+        assert manifest["entries"][0]["artifacts"]["certificate"].endswith(
+            "search.cert.json"
+        )
 
     def test_batch_handles_yml_extension(
         self, runner: CliRunner, tmp_path: Path
@@ -432,6 +447,90 @@ class TestBatchCommand:
             assert "Failed" in result.output
             # No output files for failed verification
             assert not (output_dir / "bad.py").exists()
+
+        manifest = json.loads((output_dir / "manifest.json").read_text())
+        assert manifest["verified"] == 0
+        assert manifest["failed"] == 1
+        assert manifest["entries"][0]["verified"] is False
+        assert manifest["entries"][0]["errors"] == ["Proof refinement exhausted"]
+        assert manifest["entries"][0]["artifacts"] == {}
+
+    def test_batch_manifest_path_can_be_overridden(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        output_dir = tmp_path / "output"
+        manifest_path = tmp_path / "reports" / "batch.json"
+
+        (specs_dir / "sort.yaml").write_text(
+            yaml.dump({"description": "sort a list", "function_name": "sort"})
+        )
+
+        mock_output = _mock_verified_output(language="lean")
+
+        with (
+            patch("vericode.models.get_provider", return_value=AsyncMock()),
+            patch(
+                "vericode.verifier.verify",
+                new_callable=AsyncMock,
+                return_value=mock_output,
+            ),
+        ):
+            result = runner.invoke(
+                main,
+                [
+                    "batch",
+                    "--specs",
+                    str(specs_dir),
+                    "-o",
+                    str(output_dir),
+                    "--manifest",
+                    str(manifest_path),
+                ],
+            )
+            assert result.exit_code == 0
+
+        assert manifest_path.exists()
+        assert not (output_dir / "manifest.json").exists()
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["entries"][0]["name"] == "sort"
+
+    def test_batch_manifest_can_be_disabled(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        output_dir = tmp_path / "output"
+
+        (specs_dir / "sort.yaml").write_text(
+            yaml.dump({"description": "sort a list", "function_name": "sort"})
+        )
+
+        mock_output = _mock_verified_output(language="lean")
+
+        with (
+            patch("vericode.models.get_provider", return_value=AsyncMock()),
+            patch(
+                "vericode.verifier.verify",
+                new_callable=AsyncMock,
+                return_value=mock_output,
+            ),
+        ):
+            result = runner.invoke(
+                main,
+                [
+                    "batch",
+                    "--specs",
+                    str(specs_dir),
+                    "-o",
+                    str(output_dir),
+                    "--no-manifest",
+                ],
+            )
+            assert result.exit_code == 0
+
+        assert not (output_dir / "manifest.json").exists()
 
 
 # ---------------------------------------------------------------------------

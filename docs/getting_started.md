@@ -253,6 +253,16 @@ Batch with a progress bar:
 vericode batch --specs specs/ --output verified/ --progress
 ```
 
+Every batch run writes a machine-readable manifest to
+`verified/manifest.json` by default. The manifest records the backend,
+provider, resolved batch language, per-spec verification status, iterations,
+errors, and generated artifact paths. Override the path with `--manifest` or
+disable it with `--no-manifest`:
+
+```bash
+vericode batch --specs specs/ --output verified/ --manifest reports/run.json
+```
+
 `batch` defaults the implementation language from the backend unless `--lang`
 is supplied:
 

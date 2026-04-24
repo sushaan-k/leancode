@@ -11,6 +11,7 @@ import json
 import logging
 import sys
 from collections.abc import Coroutine
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -296,6 +297,19 @@ def prove(
     default=False,
     help="Show a rich progress bar during batch verification.",
 )
+@click.option(
+    "--manifest",
+    "manifest_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write a JSON batch manifest. Defaults to <output>/manifest.json.",
+)
+@click.option(
+    "--no-manifest",
+    is_flag=True,
+    default=False,
+    help="Disable writing the batch manifest.",
+)
 @click.pass_context
 def batch(
     ctx: click.Context,
@@ -305,6 +319,8 @@ def batch(
     lang: str | None,
     provider: str,
     progress: bool,
+    manifest_path: Path | None,
+    no_manifest: bool,
 ) -> None:
     """Batch-verify multiple spec files.
 
@@ -331,6 +347,7 @@ def batch(
 
     llm = get_llm_provider(provider)
     language = lang or _BATCH_LANGUAGE_BY_BACKEND.get(backend.lower(), "python")
+    manifest_entries: list[dict[str, object]] = []
 
     def _run_batch(
         progress_bar: Progress | None,
@@ -346,20 +363,40 @@ def batch(
             )
 
             stem = yaml_file.stem
+            artifacts: dict[str, str] = {}
             if result.verified and result.certificate:
                 extension = _LANGUAGE_EXTENSIONS.get(
                     result.language or language, ".txt"
                 )
-                (output_dir / f"{stem}{extension}").write_text(result.code)
-                (output_dir / f"{stem}.proof").write_text(result.proof)
-                (output_dir / f"{stem}.cert.json").write_text(
-                    result.certificate.to_json()
-                )
+                code_path = output_dir / f"{stem}{extension}"
+                proof_path = output_dir / f"{stem}.proof"
+                cert_path = output_dir / f"{stem}.cert.json"
+                code_path.write_text(result.code)
+                proof_path.write_text(result.proof)
+                cert_path.write_text(result.certificate.to_json())
+                artifacts = {
+                    "code": str(code_path),
+                    "proof": str(proof_path),
+                    "certificate": str(cert_path),
+                }
                 if not progress:
                     console.print("  [green]Verified[/green]")
             else:
                 if not progress:
                     console.print("  [red]Failed[/red]")
+
+            manifest_entries.append(
+                {
+                    "spec": str(yaml_file),
+                    "name": stem,
+                    "verified": result.verified,
+                    "iterations": result.iterations,
+                    "backend": result.backend or backend,
+                    "language": result.language or language,
+                    "errors": result.errors,
+                    "artifacts": artifacts,
+                }
+            )
 
             if progress_bar is not None and task_id is not None:
                 progress_bar.update(task_id, advance=1)  # type: ignore[arg-type]
@@ -376,6 +413,18 @@ def batch(
             _run_batch(progress_bar, task)
     else:
         _run_batch(None, None)
+
+    if not no_manifest:
+        manifest_file = manifest_path or output_dir / "manifest.json"
+        _write_batch_manifest(
+            manifest_file,
+            specs_dir=specs_dir,
+            output_dir=output_dir,
+            backend=backend,
+            language=language,
+            provider=provider,
+            entries=manifest_entries,
+        )
 
 
 @main.command(name="cache")
@@ -481,3 +530,33 @@ def _write_output(result: VerificationOutput, path: str) -> None:
     }
     Path(path).write_text(json.dumps(data, indent=2))
     console.print(f"\nResults written to [bold]{path}[/bold]")
+
+
+def _write_batch_manifest(
+    path: Path,
+    *,
+    specs_dir: Path,
+    output_dir: Path,
+    backend: str,
+    language: str,
+    provider: str,
+    entries: list[dict[str, object]],
+) -> None:
+    """Write a machine-readable manifest for a batch verification run."""
+    verified_count = sum(1 for entry in entries if entry["verified"])
+    manifest = {
+        "schema_version": 1,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "specs_dir": str(specs_dir),
+        "output_dir": str(output_dir),
+        "backend": backend,
+        "language": language,
+        "provider": provider,
+        "total": len(entries),
+        "verified": verified_count,
+        "failed": len(entries) - verified_count,
+        "entries": entries,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2))
+    console.print(f"\nBatch manifest written to [bold]{path}[/bold]")
