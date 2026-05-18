@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -330,6 +331,52 @@ class TestVerificationCache:
 
         assert stats["entries"] == 1
         assert stats["bytes"] == 2
+
+    def test_list_entries_returns_metadata(self, tmp_path: Path) -> None:
+        vc = VerificationCache(cache_dir=tmp_path / "cache")
+        vc.put(
+            CacheEntry(
+                cache_key="entry",
+                code="code",
+                proof="proof",
+                backend="lean4",
+                language="python",
+                certificate_json="{}",
+            )
+        )
+
+        entries = vc.list_entries()
+
+        expected_bytes = (vc.cache_dir / "entry.json").stat().st_size
+        assert entries == [
+            {
+                "cache_key": "entry",
+                "backend": "lean4",
+                "language": "python",
+                "bytes": expected_bytes,
+            }
+        ]
+
+    def test_list_entries_skips_unusable_json_shapes(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "array.json").write_text("[]")
+        (cache_dir / "string.json").write_text('"not-an-entry"')
+        (cache_dir / "number.json").write_text("123")
+        (cache_dir / "invalid.json").write_text("{")
+        (cache_dir / "entry.json").write_text(
+            json.dumps(
+                {
+                    "cache_key": "entry",
+                    "backend": "lean4",
+                    "language": "python",
+                }
+            )
+        )
+
+        entries = VerificationCache(cache_dir=cache_dir).list_entries()
+
+        assert [entry["cache_key"] for entry in entries] == ["entry"]
 
 
 # ---------------------------------------------------------------------------
