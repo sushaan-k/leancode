@@ -114,6 +114,9 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="LLM provider.",
 )
 @click.option("--output", "-o", type=click.Path(), help="Write results to a file.")
+@click.option(
+    "--no-cache", is_flag=True, default=False, help="Skip verification cache."
+)
 @click.pass_context
 def verify(
     ctx: click.Context,
@@ -124,6 +127,7 @@ def verify(
     max_iterations: int,
     provider: str,
     output: str | None,
+    no_cache: bool,
 ) -> None:
     """Verify a natural-language specification.
 
@@ -171,6 +175,7 @@ def verify(
                 backend=backend,
                 provider=llm,
                 max_iterations=max_iterations,
+                use_cache=not no_cache,
             )
         )
 
@@ -285,6 +290,12 @@ def prove(
     help="Target implementation language. Defaults to the backend's native language.",
 )
 @click.option("--provider", default="anthropic", show_default=True)
+@click.option(
+    "--progress",
+    is_flag=True,
+    default=False,
+    help="Show a rich progress bar during batch verification.",
+)
 @click.pass_context
 def batch(
     ctx: click.Context,
@@ -293,6 +304,7 @@ def batch(
     backend: str,
     lang: str | None,
     provider: str,
+    progress: bool,
 ) -> None:
     """Batch-verify multiple spec files.
 
@@ -312,29 +324,102 @@ def batch(
 
     console.print(f"Found {len(yaml_files)} spec file(s)")
 
+    from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+
     from vericode.models import get_provider as get_llm_provider
     from vericode.verifier import verify as run_verify
 
     llm = get_llm_provider(provider)
     language = lang or _BATCH_LANGUAGE_BY_BACKEND.get(backend.lower(), "python")
 
-    for yaml_file in yaml_files:
-        spec = load_spec_from_yaml(str(yaml_file))
-        console.print(f"\n[bold]Processing:[/bold] {yaml_file.name}")
+    def _run_batch(
+        progress_bar: Progress | None,
+        task_id: object | None,
+    ) -> None:
+        for yaml_file in yaml_files:
+            spec = load_spec_from_yaml(str(yaml_file))
+            if not progress:
+                console.print(f"\n[bold]Processing:[/bold] {yaml_file.name}")
 
-        result: VerificationOutput = _run_async(
-            run_verify(spec, language=language, backend=backend, provider=llm)
+            result: VerificationOutput = _run_async(
+                run_verify(spec, language=language, backend=backend, provider=llm)
+            )
+
+            stem = yaml_file.stem
+            if result.verified and result.certificate:
+                extension = _LANGUAGE_EXTENSIONS.get(
+                    result.language or language, ".txt"
+                )
+                (output_dir / f"{stem}{extension}").write_text(result.code)
+                (output_dir / f"{stem}.proof").write_text(result.proof)
+                (output_dir / f"{stem}.cert.json").write_text(
+                    result.certificate.to_json()
+                )
+                if not progress:
+                    console.print("  [green]Verified[/green]")
+            else:
+                if not progress:
+                    console.print("  [red]Failed[/red]")
+
+            if progress_bar is not None and task_id is not None:
+                progress_bar.update(task_id, advance=1)  # type: ignore[arg-type]
+
+    if progress:
+        with Progress(
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress_bar:
+            task = progress_bar.add_task("Verifying", total=len(yaml_files))
+            _run_batch(progress_bar, task)
+    else:
+        _run_batch(None, None)
+
+
+@main.command(name="cache")
+@click.option(
+    "--cache-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override the verification cache directory.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.option("--list", "list_entries", is_flag=True, help="List recent entries.")
+def cache_inspect(
+    cache_dir: Path | None,
+    as_json: bool,
+    list_entries: bool,
+) -> None:
+    """Inspect the local verification cache."""
+    from vericode.cache import VerificationCache
+
+    cache = VerificationCache(cache_dir=cache_dir)
+    stats = cache.stats()
+    entries_detail = cache.list_entries() if list_entries else []
+    payload: dict[str, object] = dict(stats)
+    if list_entries:
+        payload["entries_detail"] = entries_detail
+    if as_json:
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    console.print(
+        Panel(
+            f"[bold]Cache dir:[/bold] {stats['cache_dir']}\n"
+            f"[bold]Entries:[/bold]   {stats['entries']}\n"
+            f"[bold]Bytes:[/bold]     {stats['bytes']}",
+            title="vericode cache",
+            border_style="magenta",
         )
-
-        stem = yaml_file.stem
-        if result.verified and result.certificate:
-            extension = _LANGUAGE_EXTENSIONS.get(result.language or language, ".txt")
-            (output_dir / f"{stem}{extension}").write_text(result.code)
-            (output_dir / f"{stem}.proof").write_text(result.proof)
-            (output_dir / f"{stem}.cert.json").write_text(result.certificate.to_json())
-            console.print("  [green]Verified[/green]")
-        else:
-            console.print("  [red]Failed[/red]")
+    )
+    if list_entries:
+        for entry in entries_detail:
+            console.print(
+                f"- {entry['cache_key']} [{entry['backend']}/{entry['language']}] "
+                f"{entry['bytes']} bytes"
+            )
 
 
 # ---------------------------------------------------------------------------
