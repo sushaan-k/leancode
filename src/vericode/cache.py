@@ -161,3 +161,27 @@ class VerificationCache:
             removed += 1
         logger.info("Cleared cache", extra={"removed": removed})
         return removed
+
+    def stats(self) -> dict[str, int | str]:
+        """Return cache inventory metadata for CLI inspection."""
+        if not self._cache_dir.exists():
+            return {
+                "cache_dir": str(self._cache_dir),
+                "entries": 0,
+                "bytes": 0,
+            }
+
+        files = list(self._cache_dir.glob("*.json"))
+        total_bytes = 0
+        live_entries = 0
+        for path in files:
+            try:
+                total_bytes += path.stat().st_size
+                live_entries += 1
+            except OSError:
+                continue
+        return {
+            "cache_dir": str(self._cache_dir),
+            "entries": live_entries,
+            "bytes": total_bytes,
+        }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from vericode.cache import CacheEntry, VerificationCache, cache_key
 from vericode.spec import Spec
@@ -287,6 +288,48 @@ class TestVerificationCache:
         vc.put(entry)
         assert cache_dir.exists()
         assert (cache_dir / "test.json").exists()
+
+    def test_stats_for_missing_cache_dir(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "missing"
+        stats = VerificationCache(cache_dir=cache_dir).stats()
+        assert stats == {
+            "cache_dir": str(cache_dir),
+            "entries": 0,
+            "bytes": 0,
+        }
+
+    def test_stats_reports_entries_and_bytes(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "a.json").write_text("{}")
+        (cache_dir / "b.json").write_text('{"ok": true}')
+        (cache_dir / "ignored.txt").write_text("not counted")
+
+        stats = VerificationCache(cache_dir=cache_dir).stats()
+
+        assert stats["cache_dir"] == str(cache_dir)
+        assert stats["entries"] == 2
+        assert stats["bytes"] == 14
+
+    def test_stats_ignores_files_removed_during_scan(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        disappearing = cache_dir / "gone.json"
+        surviving = cache_dir / "ok.json"
+        disappearing.write_text("{}")
+        surviving.write_text("{}")
+        original_stat = Path.stat
+
+        def flaky_stat(path: Path, *args: object, **kwargs: object) -> object:
+            if path == disappearing:
+                raise FileNotFoundError(path)
+            return original_stat(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", flaky_stat):
+            stats = VerificationCache(cache_dir=cache_dir).stats()
+
+        assert stats["entries"] == 1
+        assert stats["bytes"] == 2
 
 
 # ---------------------------------------------------------------------------

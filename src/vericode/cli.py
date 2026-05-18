@@ -378,6 +378,34 @@ def batch(
         _run_batch(None, None)
 
 
+@main.command(name="cache")
+@click.option(
+    "--cache-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override the verification cache directory.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def cache_inspect(cache_dir: Path | None, as_json: bool) -> None:
+    """Inspect the local verification cache."""
+    from vericode.cache import VerificationCache
+
+    stats = VerificationCache(cache_dir=cache_dir).stats()
+    if as_json:
+        click.echo(json.dumps(stats, indent=2))
+        return
+
+    console.print(
+        Panel(
+            f"[bold]Cache dir:[/bold] {stats['cache_dir']}\n"
+            f"[bold]Entries:[/bold]   {stats['entries']}\n"
+            f"[bold]Bytes:[/bold]     {stats['bytes']}",
+            title="vericode cache",
+            border_style="magenta",
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Display helpers
 # ---------------------------------------------------------------------------
